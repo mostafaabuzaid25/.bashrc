@@ -160,48 +160,38 @@ mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm"
 
 }
 
-function transfer
-    if test (count $argv) -eq 0
+transfer() {
+    if [ $# -eq 0 ]; then
         echo "No arguments specified. Usage:\necho transfer /tmp/test.md\ncat /tmp/test.md | transfer test.md"
         return 1
-    end
+    fi
 
-    ## get temporarily filename, output is written to this file show progress can be showed
-    set tmpfile ( mktemp -t transferXXX )
+    # get temporary filename, output is written to this file so progress can be shown
+    tmpfile=$(mktemp -t transferXXX)
 
-    ## upload stdin or file
-    set file $argv[1]
+    # upload stdin or file
+    file="$1"
+    basefile=$(basename "$file" | sed -e 's/[^a-zA-Z0-9._-]/-/g')
 
-    #if tty -s;
-    #then
-        set basefile (basename "$file" | sed -e 's/[^a-zA-Z0-9._-]/-/g')
+    if [ -d "$file" ]; then
+        # zip directory and transfer
+        zipfile=$(mktemp -t transferXXX.zip)
+        zip -r -q "$zipfile" "$file"
+        curl --progress-bar --upload-file "$zipfile" "https://transfer.sh/$basefile.zip" >> "$tmpfile"
+        rm -f "$zipfile"
+    elif [ -f "$file" ]; then
+        curl --progress-bar --upload-file "$file" "https://transfer.sh/$basefile" >> "$tmpfile"
+    elif [ ! -t 0 ]; then
+        curl --progress-bar --upload-file "-" "https://transfer.sh/$basefile" >> "$tmpfile"
+    else
+        echo "File $file doesn't exist."
+        rm -f "$tmpfile"
+        return 1
+    fi
 
-    #    if [ ! -e $file ];
-    #    then
-    #        echo "File $file doesn't exists."
-    #        return 1
-    #    fi
+    # cat output link
+    cat "$tmpfile"
 
-        if test -d $file
-            # zip directory and transfer
-            set zipfile ( mktemp -t transferXXX.zip )
-            # echo (dirname $file)
-            #cd (dirname $file) and echo (pwd)
-            zip -r -q - $file >> $zipfile
-            curl --progress-bar --upload-file "$zipfile" "https://transfer.sh/$basefile.zip" >> $tmpfile
-            rm -f $zipfile
-        else
-            # transfer file
-            curl --progress-bar --upload-file "$file" "https://transfer.sh/$basefile" >> $tmpfile
-        end
-    #else
-    #    # transfer pipe
-    #    curl --progress-bar --upload-file "-" "https://transfer.sh/$file" >> $tmpfile
-    #fi
-
-    ## cat output link
-    cat $tmpfile
-
-    ## cleanup
-    rm -f $tmpfile
-end
+    # cleanup
+    rm -f "$tmpfile"
+}
